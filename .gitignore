@@ -1,0 +1,47 @@
+# Environments and Cache
+.venv/
+env/
+venv/
+ENV/env.bak/
+venv.bak/
+.ipynb_checkpoints/
+__pycache__/
+
+# Python Artifacts
+*.pyo
+*.pyc
+*.py[cod]
+*$py.class
+
+# Windows Explorer
+Thumbs.db
+desktop.ini
+
+# macOS Finder
+.DS_Store
+
+# VS Code Settings & Cache
+.vscode/
+.idea/
+.history/
+
+# Jupyter Notebook Artifacts
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+
+# Environment variables
+.env
+.env.local
+
+# Model Artifacts and Dataset Files
+*.joblib
+*.pkl
+*.csv
+*.xslx
+data/raw/*
+data/processed/*
+models/*
+
+# EXCEPT for .gitkeep files
+!data/**/.gitkeep
+!models/.gitkeep
