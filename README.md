@@ -43,16 +43,12 @@ Lacking structured ground-truth clinical diagnoses in raw lab records, this proj
 
 ## Executive Summary & Architectural Overview
 
-┌─────────────────────────┐    ┌──────────────────────────────────┐    ┌─────────────────────────┐
-│   Raw Clinical Vector   │ ──►│   Biological Quality Gate        │ ──►│ Clinical Feature Eng.   │
-│ (CBC Lab Records)       │    │ (Rule of Three Validation)       │    │ (Mentzer Index, Gender) │
-└─────────────────────────┘    └──────────────────────────────────┘    └─────────────────────────┘
-                                                                                    │
-                                                                                    ▼
-┌─────────────────────────┐    ┌──────────────────────────────────┐    ┌─────────────────────────┐
-│ Multi-Label Predictions │ ◄──│ MultiOutput XGBoost Classifier   │ ◄──│ Weak Supervision Engine │
-│ (10 Pathology Outputs)  │    │ (Subsample & Depth Constrained) │    │ (10 Guideline Pathways) │
-└─────────────────────────┘    └──────────────────────────────────┘    └─────────────────────────┘
+1. Raw Clinical Vector (CBC Lab Records)
+2. Biological Quality Gate (Rule of Three Validation)
+3. Clinical Feature Engineering (Mentzer Index, Gender)
+4. Weak Supervision Engine (10 Guideline Pathways) 
+5. MultiOutput XGBoost Classifier (Subsample & Depth Constrained)
+6. Multi-Label Predictions (10 Pathology Outputs)
 
 ## Exploratory Data Analysis & Clinical Preprocessing
 
@@ -93,27 +89,15 @@ Lacking structured clinical diagnoses, a deterministic clinical knowledge engine
 
 To evaluate how effectively standard machine learning algorithms learn non-linear clinical pathways from 14 raw CBC parameters (WBC, RBC, HGB, HCT, MCV, MCH, MCHC, RDW, PLT, NE, LY, MO, EO, GENDER), an regularized XGBoost model wrapped inside a MultiOutputClassifier was trained on a 60/40 train/test split ($N_{\text{test}} = 7,233$).
 
-1. **Key Metrics Summary**
-
-Overall Multi-Label Hamming Loss: 0.0058 (99.42% global label accuracy)
+1. **Key Metrics Summary** Overall Multi-Label Hamming Loss: 0.0058 (99.42% global label accuracy)
 
 2. **Key Performance Insights**
 
-* **Deterministic Sharpness on Single-Threshold Target Classes (F1 = 0.99 – 1.00):**
+* **Deterministic Sharpness on Single-Threshold Target Classes (F1 = 0.99 – 1.00):** Pathologies governed by explicit quantitative bounds on primary CBC markers—such as LEUKEMIA_SUSPECT ($\text{WBC} > 50$), THROMBOCYTOSIS ($\text{PLT} > 450$), and absolute differential counts (MONOCYTOSIS, EOSINOPHILIA)—achieved 1.00 F1-scores. This confirms that XGBoost tree splits can cleanly reverse-engineer sharp numeric thresholds without decision boundary degradation across parallel trees.
 
-Pathologies governed by explicit quantitative bounds on primary CBC markers—such as LEUKEMIA_SUSPECT ($\text{WBC} > 50$), THROMBOCYTOSIS ($\text{PLT} > 450$), and absolute differential counts (MONOCYTOSIS, EOSINOPHILIA)—achieved 1.00 F1-scores. This confirms that XGBoost tree splits can cleanly reverse-engineer sharp numeric thresholds without decision boundary degradation across parallel trees.
+* **Differential Ratio Recovery (BACTERIAL_INF & VIRAL_INF):** The model achieved 0.99 F1 on BACTERIAL_INF and 0.95 F1 on VIRAL_INF. This demonstrates that decision tree ensembles successfully learn multi-feature relative percentages (Neutrophil vs. Lymphocyte dominance) directly from raw absolute leukocyte components.
 
-* **Differential Ratio Recovery (BACTERIAL_INF & VIRAL_INF):**
-
-The model achieved 0.99 F1 on BACTERIAL_INF and 0.95 F1 on VIRAL_INF. This demonstrates that decision tree ensembles successfully learn multi-feature relative percentages (Neutrophil vs. Lymphocyte dominance) directly from raw absolute leukocyte components.
-
-* **Anemia Overlap & Diagnostic Trade-offs (IDA vs. ACD):**
-
-**Iron Deficiency Anemia (IDA):** Precision = 0.80, Recall = 0.86, F1 = 0.83.
-
-**Anemia of Chronic Disease (ACD):** Precision = 0.82, Recall = 0.58, F1 = 0.68.
-
-**Clinical Root Cause:** Because secondary confirmatory assays (e.g., Serum Ferritin, Total Iron Binding Capacity) were excluded from feature matrix $X$ to simulate low-cost primary screening, the model must differentiate microcytic/normocytic anemias solely using $HGB$, $MCV$, and $RDW$. The model exhibits false-positive bleed between IDA and ACD, causing a recall drop in ACD (58%) as subtle cases are misclassified as IDA.
+* **Anemia Overlap & Diagnostic Trade-offs (IDA vs. ACD):**  **Iron Deficiency Anemia (IDA):** Precision = 0.80, Recall = 0.86, F1 = 0.83 / **Anemia of Chronic Disease (ACD):** Precision = 0.82, Recall = 0.58, F1 = 0.68. The clinical root cause of this result is that secondary confirmatory assays (e.g., Serum Ferritin, Total Iron Binding Capacity) were excluded from feature matrix $X$ to simulate low-cost primary screening, the model must differentiate microcytic/normocytic anemias solely using $HGB$, $MCV$, and $RDW$. The model exhibits false-positive bleed between IDA and ACD, causing a recall drop in ACD (58%) as subtle cases are misclassified as IDA.
 
 ### Quickstart & Setup
 
