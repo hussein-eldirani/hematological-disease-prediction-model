@@ -104,8 +104,8 @@ To evaluate how effectively standard machine learning algorithms learn non-linea
 1. **Clone & Environment Setup**
 
 ```
-git clone https://github.com/your-username/cbc-disease-detection.git
-cd cbc-disease-detection
+git clone https://github.com/hussein-eldirani/hematological-disease-prediction-model
+cd hematological-disease-prediction-model
 
 # Create and activate virtual environment
 python -m venv .venv
