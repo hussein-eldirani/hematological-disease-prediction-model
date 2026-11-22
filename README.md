@@ -111,7 +111,7 @@ Lacking structured clinical diagnoses, a deterministic clinical knowledge engine
 
 ## Model Architecture & Baseline Performance
 
-To evaluate how effectively standard machine learning algorithms learn non-linear clinical pathways from 16 raw CBC parameters (GENDER, WBC, RBC, HGB, HCT, MCV, MCH, MCHC, RDW, PLT, NE, LY, MO, EO, MENTZER_INDEX), an regularized XGBoost model wrapped inside a MultiOutputClassifier was trained on a 60/40 train/test split ($N_{\text{test}} = 7,233$).
+To evaluate how effectively standard machine learning algorithms learn non-linear clinical pathways from 16 raw CBC parameters (GENDER, WBC, NE, LY, MO, EO, RBC, HGB, HCT, MCV, MCH, MCHC, RDW, PLT, FERRITIN, MENTZER_INDEX), an regularized XGBoost model wrapped inside a MultiOutputClassifier was trained on a 60/40 train/test split ($N_{\text{test}} = 7,233$).
 
 1. **Key Metrics Summary** Overall Multi-Label Hamming Loss: 0.0058 (99.42% global label accuracy)
 
