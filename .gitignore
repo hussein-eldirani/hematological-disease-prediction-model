@@ -2,9 +2,9 @@
 .venv/
 env/
 venv/
-ENV/env.bak/
+ENV/
+env.bak/
 venv.bak/
-.ipynb_checkpoints/
 __pycache__/
 
 # Python Artifacts
@@ -12,6 +12,9 @@ __pycache__/
 *.pyc
 *.py[cod]
 *$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
 # Windows Explorer
 Thumbs.db
@@ -20,7 +23,7 @@ desktop.ini
 # macOS Finder
 .DS_Store
 
-# VS Code Settings & Cache
+# IDE Settings & Cache
 .vscode/
 .idea/
 .history/
@@ -31,13 +34,23 @@ desktop.ini
 
 # Environment variables
 .env
-.env.local
+.env.*
+!.env.example
+
+# Logs & Local Databases
+*.log
+logs/
+*.db
+*.sqlite3
+
+# Docker local overrides
+docker-compose.override.yml
 
 # Model Artifacts and Dataset Files
 *.joblib
 *.pkl
 *.csv
-*.xslx
+*.xlsx
 data/raw/*
 data/processed/*
 models/*
