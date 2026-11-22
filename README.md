@@ -9,10 +9,16 @@
 ![Matplotlib](https://img.shields.io/badge/Matplotlib-3.11.2-11557C?style=for-the-badge)
 ![Seaborn](https://img.shields.io/badge/Seaborn-0.13.2-3776AB?style=for-the-badge)
 ![Jupyter](https://img.shields.io/badge/Jupyter_Lab-IPykernel_7.4-F37626?style=for-the-badge&logo=jupyter&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.163.1-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![SQLModel](https://img.shields.io/badge/SQLModel-0.0.50-2A9D8F?style=for-the-badge&logo=python&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 
-A end-to-end Machine Learning pipeline and clinical diagnostic system engineered to detect 10 parallel hematological pathologies from raw Complete Blood Count (CBC) vectors.
+An end-to-end Machine Learning pipeline and clinical diagnostic system engineered to detect 10 parallel hematological pathologies from raw Complete Blood Count (CBC) vectors.
 
 Lacking structured ground-truth clinical diagnoses in raw lab records, this project deploys a Guideline-Driven Weak Supervision Rule Engine to programmatically generate 10 binary target classes permitting co-occurring pathologies. Baseline classification is performed using a MultiOutputClassifier wrapped around regularized XGBoost decision trees, evaluated against multi-label evaluation metrics (Hamming Loss, Per-Label Recall/Precision).
+
+Beyond offline training, the repository now includes a production-style FastAPI inference service with asynchronous lifespan loading, threadpool offloading for tree inference, a synthetic hospital-lab traffic generator (`scripts/generate_samples.py`), and PostgreSQL persistence (`hematology_postgres`) via SQLModel and `psycopg[binary]`.
 
 ## Data Source & Disclaimer
 
@@ -28,6 +34,18 @@ Lacking structured ground-truth clinical diagnoses in raw lab records, this proj
 ## Project Structure
 
 ```text
+├── app/
+│   ├── __init__.py
+│   ├── main.py               # FastAPI app, async lifespan model loading, threadpool inference & DB logging
+│   ├── db/
+│   │   ├── __init__.py
+│   │   └── database.py       # SQLModel engine, PostgreSQL connection (psycopg) & init_db()
+│   ├── schemas/
+│   │   ├── __init__.py
+│   │   └── clinical.py       # Pydantic / SQLModel schemas for 16 lab inputs, predictions & PredictionRecord
+│   └── services/
+│       ├── __init__.py
+│       └── predictor.py      # MultiOutputClassifier (.joblib) wrapper & 10-target inference logic
 ├── data/
 │   ├── raw/                  # Original raw CBC lab records
 │   └── processed/            # Cleaned, Rule-of-Three validated dataset (18,081 samples)
@@ -36,6 +54,9 @@ Lacking structured ground-truth clinical diagnoses in raw lab records, this proj
 ├── notebooks/
 │   ├── 01_eda.ipynb          # Preprocessing, Gender Decoding, Quality Gate & Labeling
 │   └── 02_training.ipynb     # Multi-Label XGBoost Training & Error Analysis
+├── scripts/
+│   └── generate_samples.py   # Simulated hospital/lab traffic generator respecting clinical bounds
+├── docker-compose.yml        # PostgreSQL service (hematology_postgres) with persistent pgdata volume
 ├── .gitignore                # Environment, model, and data exclusions
 ├── requirements.txt          # Pinned dependency requirements
 └── README.md                 # Project documentation
@@ -49,6 +70,9 @@ Lacking structured ground-truth clinical diagnoses in raw lab records, this proj
 4. Weak Supervision Engine (10 Guideline Pathways) 
 5. MultiOutput XGBoost Classifier (Subsample & Depth Constrained)
 6. Multi-Label Predictions (10 Pathology Outputs)
+7. FastAPI Inference Service (Async Lifespan & Threadpool Execution)
+8. Simulated Lab Traffic Generator (`scripts/generate_samples.py`)
+9. PostgreSQL Audit & Prediction Log (`predictionrecord` via SQLModel)
 
 ## Exploratory Data Analysis & Clinical Preprocessing
 
@@ -99,39 +123,57 @@ To evaluate how effectively standard machine learning algorithms learn non-linea
 
 * **Anemia Overlap & Diagnostic Trade-offs (IDA vs. ACD):**  **Iron Deficiency Anemia (IDA):** Precision = 0.80, Recall = 0.86, F1 = 0.83 / **Anemia of Chronic Disease (ACD):** Precision = 0.82, Recall = 0.58, F1 = 0.68. The clinical root cause of this result is that secondary confirmatory assays (e.g., Serum Ferritin, Total Iron Binding Capacity) were excluded from feature matrix $X$ to simulate low-cost primary screening, the model must differentiate microcytic/normocytic anemias solely using $HGB$, $MCV$, and $RDW$. The model exhibits false-positive bleed between IDA and ACD, causing a recall drop in ACD (58%) as subtle cases are misclassified as IDA.
 
-### Quickstart & Setup
+## Production Inference API & Persistence Layer
+
+To move beyond offline notebook evaluation, the project adds a FastAPI service backed by PostgreSQL via SQLModel while preserving non-blocking execution for CPU-bound tree inference:
+
+* **Asynchronous Lifespan & Threadpool Inference (`app/main.py`, `app/services/predictor.py`):** Loads the trained `.joblib` `MultiOutputClassifier` pipeline once during FastAPI lifespan startup and offloads synchronous `.predict()` / `.predict_proba()` calls to a worker threadpool via `run_in_threadpool` so concurrent requests do not block the event loop.
+* **Schema Alignment (`app/schemas/clinical.py`):** Validates the 16 raw clinical input features (`GENDER` through `MENTZER_INDEX`), formats the 10 multi-label pathology targets (`LEUKEMIA_SUSPECT`, `VIRAL_INF`, `BACTERIAL_INF`, `MONOCYTOSIS`, `EOSINOPHILIA`, `CHRONIC_DISEASE_ANEMIA`, `THALASSEMIA_TRAIT`, `IRON_DEFICIENCY_ANEMIA`, `THROMBOCYTOPENIA`, `THROMBOCYTOSIS`), and defines the `PredictionRecord` table.
+* **PostgreSQL Audit Logging (`app/db/database.py`, `docker-compose.yml`):** Runs `hematology_postgres` with a persistent named volume (`pgdata`) and connects through SQLModel using the `psycopg[binary]` driver, storing input features alongside predicted pathology flags on each inference request.
+* **Simulated Lab Traffic (`scripts/generate_samples.py`):** Generates synthetic hematology payloads within realistic clinical ranges and biological rules and `POST`s them to the inference endpoint to simulate incoming hospital lab traffic.
+
+### End-to-End Workflow (Training, Serving, Traffic Simulation & Verification)
 
 1. **Clone & Environment Setup**
+   ```
+   git clone https://github.com/your-username/cbc-disease-detection.git
+   cd cbc-disease-detection
+   
+   # Create and activate virtual environment
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-```
-git clone https://github.com/hussein-eldirani/hematological-disease-prediction-model
-cd hematological-disease-prediction-model
+   # Install dependencies
+   pip install -r requirements.txt
+   ```
 
-# Create and activate virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+2. **Train & Save the Model**
+   Run `notebooks/01_eda.ipynb` to produce the cleaned dataset and `notebooks/02_training.ipynb` to train and export the serialized pipeline to `models/multi_label_disease_model.joblib`.
 
-# Install dependencies
-pip install -r requirements.txt
-```
+3. **Start PostgreSQL & Initialize the Table**
+   Start the `hematology_postgres` container and create the `predictionrecord` table:
+   ```
+   docker compose up -d
+   python -c "from app.db.database import init_db; init_db(); print('Table ready!')"
+   ```
 
-2. **Model Inference Example**
+4. **Start the FastAPI Server**
+   Set `MODEL_PATH` and launch Uvicorn (in Windows CMD, use `set` and `venv\Scripts\uvicorn.exe` if `uvicorn` is not on your global `PATH`):
+   ```
+   set MODEL_PATH=models\multi_label_disease_model.joblib
+   venv\Scripts\uvicorn.exe app.main:app --reload
+   ```
+   (On Linux/macOS or PowerShell, set `MODEL_PATH` accordingly and run `uvicorn app.main:app --reload`.)
 
-```
-import joblib
-import pandas as pd
+5. **Simulate Lab Traffic (`POST /predict`)**
+   In a second terminal with your virtual environment activated, run the sample generator to send synthetic lab panels to the API and log results to PostgreSQL:
+   ```
+   python scripts\generate_samples.py
+   ```
 
-# Load saved multi-label model
-model = joblib.load("models/multi_label_disease_model.joblib")
-
-# Example raw patient CBC vector
-sample_patient = pd.DataFrame([{
-    'WBC': 14.2, 'RBC': 3.8, 'HGB': 10.1, 'HCT': 31.0, 
-    'MCV': 72.0, 'MCH': 24.0, 'MCHC': 31.0, 'RDW': 16.2, 
-    'PLT': 480, 'NE': 9.1, 'LY': 3.2, 'MO': 1.1, 'EO': 0.2, 'GENDER': 1
-}])
-
-# Generate predictions across all 10 pathology targets
-predictions = model.predict(sample_patient)
-print("Predicted Pathology Vector:", predictions)
-```
+6. **Inspect Logged Predictions in PostgreSQL**
+   Query the `predictionrecord` table inside the `hematology_postgres` container to verify inserted rows and predicted pathology flags:
+   ```
+   docker exec -it hematology_postgres psql -U lab_user -d hematology_db -c "SELECT id, created_at, gender_label, wbc, hgb, iron_deficiency_anemia, viral_inf FROM predictionrecord LIMIT 10;"
+   ```
+   (You can customize the SQL query according to your desired output.)
